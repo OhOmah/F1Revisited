@@ -14,12 +14,11 @@ from matplotlib.collections import LineCollection
 
 def calculate_driver_confidence(lap, lap_list):
     '''PURPOSE OF THIS FUNCTION: 
-    Calculate the brake consistancy of a driver using existing telemetry data. 
-    We need to calculate 2 Variable
-    1. Distance traveled when Braking
-    2. Average speed during the braking event
-    
-    Then get the time when the braking even starts and ends
+    Use telemetry data and data that's been feature engineered to quantify a driver's confidence
+    based on braking performance around corners. 
+    TODO: 
+    1. Normalize final varibles in equation 
+    2. filter out braking zones that aren't important to analysis
     '''
     # Define final variable
     lap_cols = lap.telemetry.columns
@@ -95,3 +94,44 @@ def calculate_driver_confidence(lap, lap_list):
         driver_confidence = (.3 * (1 - brake_consistency_score)) + (.2 * abs(total_tel['Deceleration'].mean())) + (.4 * brake_consistency_score) - (.1 * total_tel['TotalDistanceBrakedNor'].mean())
 
     return total_tel, driver_confidence, brake_consistency_score
+
+
+def get_statistical_metrics(lap):
+    #Generate Lap list
+    lap_list = lap['LapNumber'].to_list()
+    lap_cols = lap.telemetry.columns
+    total_tel = pd.DataFrame(columns=lap_cols)
+    for lap in lap_list:
+        lap_tel = lap[lap['LapNumber'] == lap].telemetry
+        lap_tel['LapNumber'] = lap
+        # Now Calculate other features such as Decleration
+        lap_tel['DistanceBraked'] = lap_tel.groupby('BrakeZone')['Distance'].diff().fillna(0)
+        lap_tel['TotalDistanceBraked'] = lap_tel.groupby('BrakeZone')['DistanceBraked'].transform('sum')
+        # Now Calculate Average Speed at braking
+        lap_tel['AvgSpeedBraking'] = lap_tel.groupby('BrakeZone')['Speed'].transform('mean')
+        # Calculate braking times and total laptime in seconds
+        lap_tel['TotalTime'] = lap_tel['Time'].iloc[-1].total_seconds()
+        brake_start_dict = {}
+        brake_end_dict = {}
+        brake_start_speed_dict = {}
+        brake_end_speed_dict = {}
+        for zone, group in lap_tel.groupby('BrakeZone'):
+            brake_start_dict[zone] = group['Time'].min().total_seconds()
+            brake_end_dict[zone] = group['Time'].max().total_seconds()
+            brake_start_speed_dict[zone] = group['Speed'].max()
+            brake_end_speed_dict[zone] = group['Speed'].min()
+
+        # Map each new value 
+        lap_tel['SpeedatBrakeStart'] = lap_tel['BrakeZone'].map(brake_start_speed_dict)
+        lap_tel['SpeedatBrakeEnd'] = lap_tel['BrakeZone'].map(brake_end_speed_dict)
+        lap_tel['BrakeStartTime'] = lap_tel['BrakeZone'].map(brake_start_dict)
+        lap_tel['BrakeEndTime'] = lap_tel['BrakeZone'].map(brake_end_dict)
+        lap_tel['TimeBraking'] = lap_tel['BrakeEndTime'] - lap_tel['BrakeStartTime']
+
+        # Convert from kph to m/s
+        lap_tel['SpeedatBrakeStartMS'] = lap_tel['SpeedatBrakeStart'] * .2778
+        lap_tel['SpeedatBrakeEndMS'] = lap_tel['SpeedatBrakeEnd'] * .2778
+
+        # Calculate Deceleration
+        lap_tel['Deceleration'] = (lap_tel['SpeedatBrakeStartMS']) / lap_tel['TimeBraking']
+    return total_tel

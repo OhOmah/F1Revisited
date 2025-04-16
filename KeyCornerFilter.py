@@ -101,9 +101,13 @@ def get_statistical_metrics(lap):
     lap_list = lap['LapNumber'].to_list()
     lap_cols = lap.telemetry.columns
     total_tel = pd.DataFrame(columns=lap_cols)
-    for lap in lap_list:
-        lap_tel = lap[lap['LapNumber'] == lap].telemetry
-        lap_tel['LapNumber'] = lap
+    for lap_number in lap_list:
+        lap_tel = lap[lap['LapNumber'] == lap_number].telemetry
+        lap_tel['LapNumber'] = lap_number
+        # Calculate BrakeZone
+        lap_tel['BrakeZone'] = lap_tel[lap_tel['Brake']].index.to_series().diff().ne(1).cumsum()
+        # Filter out non-braking events
+        lap_tel = lap_tel.dropna(subset=['BrakeZone'])
         # Now Calculate other features such as Decleration
         lap_tel['DistanceBraked'] = lap_tel.groupby('BrakeZone')['Distance'].diff().fillna(0)
         lap_tel['TotalDistanceBraked'] = lap_tel.groupby('BrakeZone')['DistanceBraked'].transform('sum')
@@ -134,4 +138,9 @@ def get_statistical_metrics(lap):
 
         # Calculate Deceleration
         lap_tel['Deceleration'] = (lap_tel['SpeedatBrakeStartMS']) / lap_tel['TimeBraking']
+
+
+        total_tel = pd.concat([total_tel, lap_tel], ignore_index=True)
+        # drop cases where deceleration is inf due to micro braking events
+        total_tel = total_tel[total_tel['Deceleration'] < 800]
     return total_tel

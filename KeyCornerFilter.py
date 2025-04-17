@@ -19,8 +19,12 @@ def calculate_driver_confidence(lap, lap_list):
     TODO: 
     1. Normalize final varibles in equation 
     2. filter out braking zones that aren't important to analysis
+
+    FUNCTION IS DEPRECIATED, NEED TO REMOVE ASAP
     '''
     # Define final variable
+    # Why the hell did I feed in the lap_list, when I could just generate it here. 
+    # TODO: Fix this in updated function
     lap_cols = lap.telemetry.columns
     total_tel = pd.DataFrame(columns=lap_cols)
     for lap_number in lap_list:
@@ -97,7 +101,7 @@ def calculate_driver_confidence(lap, lap_list):
 
 
 def get_statistical_metrics(lap):
-    #Generate Lap list
+    # Generate Lap list
     lap_list = lap['LapNumber'].to_list()
     lap_cols = lap.telemetry.columns
     total_tel = pd.DataFrame(columns=lap_cols)
